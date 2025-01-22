@@ -2,20 +2,19 @@ import streamlit as st
 from phi.agent import Agent
 from phi.model.google import Gemini
 from phi.tools.duckduckgo import DuckDuckGo
-from google.generativeai import upload_file,get_file
+from phi.tools.youtube_tools import YouTubeTools
+from google.generativeai import upload_file, get_file
 import google.generativeai as genai
 
 import time
 from pathlib import Path
-
 import tempfile
-
 from dotenv import load_dotenv
 load_dotenv()
 
 import os
 
-API_KEY=os.getenv("GOOGLE_API_KEY")
+API_KEY = os.getenv("GOOGLE_API_KEY")
 if API_KEY:
     genai.configure(api_key=API_KEY)
 
@@ -29,30 +28,84 @@ st.set_page_config(
 st.title("Phidata Video AI Summarizer Agent 🎥🎤🖬")
 st.header("Powered by Gemini 2.0 Flash Exp")
 
-
 @st.cache_resource
 def initialize_agent():
     return Agent(
         name="Video AI Summarizer",
         model=Gemini(id="gemini-2.0-flash-exp"),
-        tools=[DuckDuckGo()],
+        tools=[DuckDuckGo(), YouTubeTools()],
         markdown=True,
     )
 
-## Initialize the agent
-multimodal_Agent=initialize_agent()
+# Initialize the agent
+multimodal_Agent = initialize_agent()
 
-# File uploader
-video_file = st.file_uploader(
-    "Upload a video file", type=['mp4', 'mov', 'avi'], help="Upload a video for AI analysis"
+# Video input options
+video_input_type = st.radio(
+    "Select input type",
+    options=["Upload Video File", "YouTube Video URL"],
+    help="Choose whether to upload a local video file or provide a YouTube video link."
 )
 
-if video_file:
-    with tempfile.NamedTemporaryFile(delete=False, suffix='.mp4') as temp_video:
-        temp_video.write(video_file.read())
-        video_path = temp_video.name
+if video_input_type == "Upload Video File":
+    video_file = st.file_uploader(
+        "Upload a video file", type=['mp4', 'mov', 'avi'], help="Upload a video for AI analysis"
+    )
 
-    st.video(video_path, format="video/mp4", start_time=0)
+    if video_file:
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.mp4') as temp_video:
+            temp_video.write(video_file.read())
+            video_path = temp_video.name
+
+        st.video(video_path, format="video/mp4", start_time=0)
+
+        user_query = st.text_area(
+            "What insights are you seeking from the video?",
+            placeholder="Ask anything about the video content. The AI agent will analyze and gather additional context if needed.",
+            help="Provide specific questions or insights you want from the video."
+        )
+
+        if st.button("🔍 Analyze Video", key="analyze_video_button"):
+            if not user_query:
+                st.warning("Please enter a question or insight to analyze the video.")
+            else:
+                try:
+                    with st.spinner("Processing video and gathering insights..."):
+                        # Upload and process video file
+                        processed_video = upload_file(video_path)
+                        while processed_video.state.name == "PROCESSING":
+                            time.sleep(1)
+                            processed_video = get_file(processed_video.name)
+
+                        # Prompt generation for analysis
+                        analysis_prompt = (
+                            f"""
+                            Analyze the uploaded video for content and context.
+                            Respond to the following query using video insights and supplementary web research:
+                            {user_query}
+
+                            Provide a detailed, user-friendly, and actionable response.
+                            """
+                        )
+
+                        # AI agent processing
+                        response = multimodal_Agent.run(analysis_prompt, videos=[processed_video])
+
+                    # Display the result
+                    st.subheader("Analysis Result")
+                    st.markdown(response.content)
+
+                except Exception as error:
+                    st.error(f"An error occurred during analysis: {error}")
+                finally:
+                    # Clean up temporary video file
+                    Path(video_path).unlink(missing_ok=True)
+else:
+    youtube_url = st.text_input(
+        "Enter YouTube video URL",
+        placeholder="https://www.youtube.com/watch?v=example",
+        help="Provide the URL of the YouTube video you want to analyze."
+    )
 
     user_query = st.text_area(
         "What insights are you seeking from the video?",
@@ -60,22 +113,18 @@ if video_file:
         help="Provide specific questions or insights you want from the video."
     )
 
-    if st.button("🔍 Analyze Video", key="analyze_video_button"):
-        if not user_query:
-            st.warning("Please enter a question or insight to analyze the video.")
+    if st.button("🔍 Analyze YouTube Video", key="analyze_youtube_button"):
+        if not youtube_url or not user_query:
+            st.warning("Please enter a valid YouTube URL and a query.")
         else:
             try:
-                with st.spinner("Processing video and gathering insights..."):
-                    # Upload and process video file
-                    processed_video = upload_file(video_path)
-                    while processed_video.state.name == "PROCESSING":
-                        time.sleep(1)
-                        processed_video = get_file(processed_video.name)
-
+                with st.spinner("Processing YouTube video and gathering insights..."):
                     # Prompt generation for analysis
                     analysis_prompt = (
                         f"""
-                        Analyze the uploaded video for content and context.
+                        Analyze the following YouTube video for content and context:
+                        {youtube_url}
+
                         Respond to the following query using video insights and supplementary web research:
                         {user_query}
 
@@ -84,7 +133,7 @@ if video_file:
                     )
 
                     # AI agent processing
-                    response = multimodal_Agent.run(analysis_prompt, videos=[processed_video])
+                    response = multimodal_Agent.run(analysis_prompt)
 
                 # Display the result
                 st.subheader("Analysis Result")
@@ -92,11 +141,6 @@ if video_file:
 
             except Exception as error:
                 st.error(f"An error occurred during analysis: {error}")
-            finally:
-                # Clean up temporary video file
-                Path(video_path).unlink(missing_ok=True)
-else:
-    st.info("Upload a video file to begin analysis.")
 
 # Customize text area height
 st.markdown(
@@ -109,5 +153,3 @@ st.markdown(
     """,
     unsafe_allow_html=True
 )
-
-
