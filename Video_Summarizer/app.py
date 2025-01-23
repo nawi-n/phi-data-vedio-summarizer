@@ -18,7 +18,6 @@ API_KEY = os.getenv("GOOGLE_API_KEY")
 if API_KEY:
     genai.configure(api_key=API_KEY)
 
-# Page configuration
 st.set_page_config(
     page_title="Multimodal AI Agent- Video Summarizer",
     page_icon="🎥",
@@ -37,10 +36,8 @@ def initialize_agent():
         markdown=True,
     )
 
-# Initialize the agent
 multimodal_Agent = initialize_agent()
 
-# Video input options
 video_input_type = st.radio(
     "Select input type",
     options=["Upload Video File", "YouTube Video URL"],
@@ -71,13 +68,11 @@ if video_input_type == "Upload Video File":
             else:
                 try:
                     with st.spinner("Processing video and gathering insights..."):
-                        # Upload and process video file
                         processed_video = upload_file(video_path)
                         while processed_video.state.name == "PROCESSING":
                             time.sleep(1)
                             processed_video = get_file(processed_video.name)
 
-                        # Prompt generation for analysis
                         analysis_prompt = (
                             f"""
                             Analyze the uploaded video for content and context.
@@ -91,14 +86,12 @@ if video_input_type == "Upload Video File":
                         # AI agent processing
                         response = multimodal_Agent.run(analysis_prompt, videos=[processed_video])
 
-                    # Display the result
                     st.subheader("Analysis Result")
                     st.markdown(response.content)
 
                 except Exception as error:
                     st.error(f"An error occurred during analysis: {error}")
                 finally:
-                    # Clean up temporary video file
                     Path(video_path).unlink(missing_ok=True)
 else:
     youtube_url = st.text_input(
@@ -119,7 +112,6 @@ else:
         else:
             try:
                 with st.spinner("Processing YouTube video and gathering insights..."):
-                    # Prompt generation for analysis
                     analysis_prompt = (
                         f"""
                         Analyze the following YouTube video for content and context:
@@ -132,17 +124,14 @@ else:
                         """
                     )
 
-                    # AI agent processing
                     response = multimodal_Agent.run(analysis_prompt)
 
-                # Display the result
                 st.subheader("Analysis Result")
                 st.markdown(response.content)
 
             except Exception as error:
                 st.error(f"An error occurred during analysis: {error}")
 
-# Customize text area height
 st.markdown(
     """
     <style>
